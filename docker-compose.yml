@@ -1,0 +1,154 @@
+name: academic
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+    networks:
+      - academic-net
+
+  kafka:
+    image: apache/kafka:latest
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      retries: 10
+    networks:
+      - academic-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: academic
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  worker-notification:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      PROCESSOR: notification
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  worker-audit:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      PROCESSOR: audit
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  worker-report:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      PROCESSOR: report
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  worker-dlq:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      PROCESSOR: dlq
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - academic-net
+
+  go:
+    image: golang:1.23-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    profiles:
+      - tools
+    networks:
+      - academic-net
+
+volumes:
+  postgres-data:
+  go-mod-cache:
+  go-build-cache:
+
+networks:
+  academic-net:
+    driver: bridge

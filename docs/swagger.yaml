@@ -1,0 +1,115 @@
+basePath: /
+definitions:
+  domain.Enrollment:
+    properties:
+      course_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      student_id:
+        type: string
+    type: object
+  domain.Student:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  handler.createEnrollmentRequest:
+    properties:
+      course_id:
+        type: string
+      student_id:
+        type: string
+    required:
+    - course_id
+    - student_id
+    type: object
+  handler.errorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  handler.registerStudentRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+    required:
+    - email
+    - name
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Plataforma acadêmica orientada a eventos
+  title: Academic API
+  version: "1.0"
+paths:
+  /enrollments:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Dados da matrícula
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createEnrollmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Enrollment'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.errorResponse'
+      summary: Criar matrícula
+      tags:
+      - enrollments
+  /students:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Dados do aluno
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.registerStudentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Student'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.errorResponse'
+      summary: Cadastrar aluno
+      tags:
+      - students
+swagger: "2.0"
