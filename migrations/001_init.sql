@@ -18,3 +18,11 @@ CREATE TABLE processed_events (
     processed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (event_id, consumer_group)
 );
+
+CREATE TABLE outbox_events (
+    id          VARCHAR(36)  PRIMARY KEY,
+    topic       VARCHAR(255) NOT NULL,
+    payload     TEXT         NOT NULL,
+    published   BOOLEAN      NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);

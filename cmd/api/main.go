@@ -1,17 +1,17 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"log"
 	"os"
+	"os/signal"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
 	_ "github.com/marcosffp/event-driven-architecture/docs"
-	"github.com/marcosffp/event-driven-architecture/internal/handler"
-	"github.com/marcosffp/event-driven-architecture/internal/kafka"
-	"github.com/marcosffp/event-driven-architecture/internal/repository"
-	"github.com/marcosffp/event-driven-architecture/internal/service"
+	"github.com/marcosffp/event-driven-architecture/internal/infra/handler"
+	"github.com/marcosffp/event-driven-architecture/internal/infra/kafka"
+	"github.com/marcosffp/event-driven-architecture/internal/infra/postgres"
+	"github.com/marcosffp/event-driven-architecture/internal/usecase"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -22,28 +22,31 @@ import (
 // @host        localhost:8080
 // @BasePath    /
 func main() {
-	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	db, err := postgres.Open(os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatalf("openDB: %v", err)
+		log.Fatalf("main: %v", err)
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Fatalf("pingDB: %v", err)
-	}
+	publisher := kafka.NewPublisher(os.Getenv("KAFKA_BROKER"))
+	defer publisher.Close()
 
-	publisher := kafka.NewKafkaPublisher(os.Getenv("KAFKA_BROKER"))
+	studentUseCase := usecase.NewStudentUseCase(postgres.NewStudentRepository(db))
+	enrollmentUseCase := usecase.NewEnrollmentUseCase(postgres.NewEnrollmentRepository(db))
 
-	studentService := service.NewStudentService(repository.NewPostgresStudentRepository(db), publisher)
-	enrollmentService := service.NewEnrollmentService(repository.NewPostgresEnrollmentRepository(db), publisher)
+	relay := postgres.NewOutboxRelay(db, publisher)
+	go relay.Run(ctx)
 
 	router := gin.Default()
-	router.POST("/students", handler.NewStudentHandler(studentService).RegisterStudent)
-	router.POST("/enrollments", handler.NewEnrollmentHandler(enrollmentService).CreateEnrollment)
+	router.POST("/students", handler.NewStudentHandler(studentUseCase).Register)
+	router.POST("/enrollments", handler.NewEnrollmentHandler(enrollmentUseCase).Create)
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	log.Println("API listening on :8080")
 	if err := router.Run(":8080"); err != nil {
-		log.Fatalf("runServer: %v", err)
+		log.Fatalf("main: %v", err)
 	}
 }

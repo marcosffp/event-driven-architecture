@@ -1,4 +1,5 @@
-package domain
+
+package events
 
 import "time"
 
@@ -6,11 +7,6 @@ const (
 	TopicStudentRegistered = "academic.student.registered"
 	TopicEnrollmentCreated = "academic.enrollment.created"
 	TopicDeadLetter        = "academic.events.dlq"
-
-	GroupNotification = "academic-notification"
-	GroupAudit        = "academic-audit"
-	GroupReport       = "academic-report"
-	GroupDLQ          = "academic-dlq"
 )
 
 type StudentRegisteredEvent struct {
@@ -36,4 +32,5 @@ type DeadLetterEvent struct {
 	OriginalPayload string    `json:"original_payload"`
 	FailureReason   string    `json:"failure_reason"`
 	FailedAt        time.Time `json:"failed_at"`
+	DLQRetryCount   int       `json:"dlq_retry_count"`
 }
