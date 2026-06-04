@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"time"
 
@@ -36,6 +37,8 @@ func RunConsumer(ctx context.Context, config ConsumerConfig) {
 		StartOffset: kafkago.FirstOffset,
 	})
 	defer reader.Close()
+
+	checkConsumerLag(ctx, config)
 
 	for {
 		message, err := reader.FetchMessage(ctx)
@@ -132,5 +135,89 @@ func publishDeadLetter(ctx context.Context, msg kafkago.Message, config Consumer
 	}
 	if err := config.Publisher.Publish(ctx, events.TopicDeadLetter, payload); err != nil {
 		log.Printf("[%s] publishDeadLetter: %v", config.GroupID, err)
+	}
+}
+
+// checkConsumerLag verifica quantas mensagens se acumularam nos tópicos enquanto
+// este consumer group estava indisponível, e loga o resultado no startup.
+func checkConsumerLag(ctx context.Context, config ConsumerConfig) {
+	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	conn, err := kafkago.DialContext(checkCtx, "tcp", config.Broker)
+	if err != nil {
+		log.Printf("[%s] lag check: não foi possível conectar: %v", config.GroupID, err)
+		return
+	}
+	defer conn.Close()
+
+	partitions, err := conn.ReadPartitions(config.Topics...)
+	if err != nil {
+		log.Printf("[%s] lag check: erro ao ler partições: %v", config.GroupID, err)
+		return
+	}
+
+	topicPartitions := make(map[string][]int)
+	latestOffsets := make(map[string]map[int]int64)
+
+	for _, p := range partitions {
+		topicPartitions[p.Topic] = append(topicPartitions[p.Topic], p.ID)
+		if latestOffsets[p.Topic] == nil {
+			latestOffsets[p.Topic] = make(map[int]int64)
+		}
+		partConn, dialErr := kafkago.DialLeader(checkCtx, "tcp", config.Broker, p.Topic, p.ID)
+		if dialErr != nil {
+			continue
+		}
+		last, readErr := partConn.ReadLastOffset()
+		partConn.Close()
+		if readErr != nil {
+			continue
+		}
+		latestOffsets[p.Topic][p.ID] = last
+	}
+
+	brokerAddr, resolveErr := net.ResolveTCPAddr("tcp", config.Broker)
+	if resolveErr != nil {
+		log.Printf("[%s] lag check: resolve addr: %v", config.GroupID, resolveErr)
+		return
+	}
+
+	client := &kafkago.Client{
+		Addr:    brokerAddr,
+		Timeout: 10 * time.Second,
+	}
+
+	fetchResp, err := client.OffsetFetch(checkCtx, &kafkago.OffsetFetchRequest{
+		GroupID: config.GroupID,
+		Topics:  topicPartitions,
+	})
+	if err != nil {
+		log.Printf("[%s] lag check: erro ao buscar offsets do grupo: %v", config.GroupID, err)
+		return
+	}
+
+	totalLag := int64(0)
+	for topicName, partFetches := range fetchResp.Topics {
+		for _, pf := range partFetches {
+			if pf.Error != nil {
+				continue
+			}
+			committed := pf.CommittedOffset
+			if committed < 0 {
+				committed = 0
+			}
+			latest := latestOffsets[topicName][pf.Partition]
+			lag := latest - committed
+			if lag > 0 {
+				totalLag += lag
+			}
+		}
+	}
+
+	if totalLag > 0 {
+		log.Printf("[%s] *** RETOMANDO APÓS INDISPONIBILIDADE: %d mensagens acumuladas aguardando processamento ***", config.GroupID, totalLag)
+	} else {
+		log.Printf("[%s] consumidor atualizado, sem mensagens pendentes", config.GroupID)
 	}
 }
