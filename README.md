@@ -135,7 +135,8 @@ A aplicação segue **Clean Architecture** com separação estrita em camadas. A
 │   │   ├── notification.go      ← NotificationProcessor
 │   │   ├── audit.go             ← AuditProcessor
 │   │   ├── report.go            ← ReportProcessor
-│   │   └── dead_letter.go       ← DeadLetterProcessor (auto-reprocessamento DLQ)
+│   │   ├── dead_letter.go       ← DeadLetterProcessor (auto-reprocessamento DLQ)
+│   │   └── demo.go              ← simulatedFailure (FAIL_RATE=1 para demo)
 │   └── infra/
 │       ├── handler/
 │       │   ├── student_handler.go
@@ -194,6 +195,8 @@ Contém apenas structs e interfaces. **Zero importações externas** — apenas 
 
 Definem `Student`, `StudentID`, `Enrollment`, `EnrollmentID` e `CourseID`. Os tipos de ID próprios evitam confusão de IDs em chamadas de função.
 
+`student.go` também exporta `ErrEmailAlreadyTaken` — o repositório retorna esse erro ao detectar violação de `UNIQUE` no banco, e o handler o transforma em `409 Conflict`.
+
 #### `domain/outbox.go`
 
 ```go
@@ -218,9 +221,14 @@ type IdempotencyRepository interface {
     TryClaim(ctx context.Context, eventID, consumerGroup string) (bool, error)
     ReleaseClaim(ctx context.Context, eventID, consumerGroup string) error
 }
+
+type OutboxRepository interface {
+    FetchUnpublished(ctx context.Context, limit int) ([]domain.OutboxEntry, error)
+    MarkPublished(ctx context.Context, id string) error
+}
 ```
 
-`TryClaim` é a operação atômica de idempotência. `ReleaseClaim` é chamado antes de enviar para a DLQ, para que o ciclo de reprocessamento consiga reivindicar o evento de volta.
+`TryClaim` é a operação atômica de idempotência. `ReleaseClaim` é chamado antes de enviar para a DLQ, para que o ciclo de reprocessamento consiga reivindicar o evento de volta. `OutboxRepository` é usado pelo `OutboxRelay` para buscar e marcar eventos pendentes.
 
 #### `domain/port/repository.go` — Contratos de persistência
 
@@ -288,6 +296,7 @@ Cada processor implementa `Process(ctx context.Context, payload []byte) error`. 
 | `audit.go` | `AuditProcessor` | `student.registered`, `enrollment.created` | Loga o ID da entidade e a latência (`time.Since(published_at)`) |
 | `report.go` | `ReportProcessor` | `enrollment.created` apenas | Loga dados completos da matrícula com latência |
 | `dead_letter.go` | `DeadLetterProcessor` | `events.dlq` | Se `dlq_retry_count < 3`: aguarda backoff (10s/20s/30s) e republica no tópico original; senão, descarta |
+| `demo.go` | — | — | Exporta `simulatedFailure`: retorna erro em todos os processadores quando `FAIL_RATE=1`, permitindo demonstrar retry e DLQ sem precisar de falha real |
 
 ---
 
@@ -313,7 +322,7 @@ Expõe dois métodos:
 
 #### `kafka/consumer.go`
 
-`RunConsumer` entra em loop infinito: `FetchMessage → handleMessage → CommitMessages`. O commit só acontece se `handleMessage` retornar `nil` — erros de infra não commitam o offset, garantindo reentrega pelo Kafka.
+`RunConsumer` inicia com `checkConsumerLag`: conecta ao broker, compara os últimos offsets das partições com o offset commitado pelo consumer group e loga quantas mensagens se acumularam durante a indisponibilidade. Depois entra em loop infinito: `FetchMessage → handleMessage → CommitMessages`. O commit só acontece se `handleMessage` retornar `nil` — erros de infra não commitam o offset, garantindo reentrega pelo Kafka.
 
 `handleMessage` executa o protocolo completo:
 
@@ -441,6 +450,7 @@ Documentação interativa disponível em `http://localhost:8080/swagger/index.ht
 | Código | Quando |
 |---|---|
 | `400` | Body inválido ou campos obrigatórios ausentes |
+| `409` | Email já cadastrado (`ErrEmailAlreadyTaken`) |
 | `500` | Falha ao persistir no banco |
 
 ---
@@ -480,6 +490,7 @@ cp .env.example .env
 | `API_PORT` | `8080` | Porta exposta pela API |
 | `KAFKA_BROKER` | `kafka:9092` | Endereço do broker |
 | `PROCESSOR` | `notification` | Tipo do worker: `notification`, `audit`, `report` ou `dlq` |
+| `FAIL_RATE` | `` (vazio) | `1` faz todos os workers falharem 100% das mensagens — para demonstrar retry e DLQ em apresentações |
 
 ---
 

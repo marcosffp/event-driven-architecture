@@ -17,6 +17,10 @@ func NewNotificationProcessor() *NotificationProcessor {
 }
 
 func (p *NotificationProcessor) Process(ctx context.Context, payload []byte) error {
+	if err := simulatedFailure("NotificationProcessor"); err != nil {
+		return err
+	}
+
 	var studentEvent events.StudentRegisteredEvent
 	if err := json.Unmarshal(payload, &studentEvent); err == nil && studentEvent.Email != "" {
 		log.Printf("[notification] student.registered | email: %s | latência: %s",

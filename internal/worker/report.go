@@ -17,6 +17,10 @@ func NewReportProcessor() *ReportProcessor {
 }
 
 func (p *ReportProcessor) Process(ctx context.Context, payload []byte) error {
+	if err := simulatedFailure("ReportProcessor"); err != nil {
+		return err
+	}
+
 	var enrollmentEvent events.EnrollmentCreatedEvent
 	if err := json.Unmarshal(payload, &enrollmentEvent); err != nil {
 		return fmt.Errorf("ReportProcessor.Process: unmarshal: %w", err)

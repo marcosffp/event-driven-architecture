@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/marcosffp/event-driven-architecture/internal/domain/port"
@@ -138,8 +139,6 @@ func publishDeadLetter(ctx context.Context, msg kafkago.Message, config Consumer
 	}
 }
 
-// checkConsumerLag verifica quantas mensagens se acumularam nos tópicos enquanto
-// este consumer group estava indisponível, e loga o resultado no startup.
 func checkConsumerLag(ctx context.Context, config ConsumerConfig) {
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -153,7 +152,11 @@ func checkConsumerLag(ctx context.Context, config ConsumerConfig) {
 
 	partitions, err := conn.ReadPartitions(config.Topics...)
 	if err != nil {
-		log.Printf("[%s] lag check: erro ao ler partições: %v", config.GroupID, err)
+		if isUnknownTopicError(err) {
+			log.Printf("[%s] consumidor atualizado, sem mensagens pendentes", config.GroupID)
+		} else {
+			log.Printf("[%s] lag check: erro ao ler partições: %v", config.GroupID, err)
+		}
 		return
 	}
 
@@ -220,4 +223,8 @@ func checkConsumerLag(ctx context.Context, config ConsumerConfig) {
 	} else {
 		log.Printf("[%s] consumidor atualizado, sem mensagens pendentes", config.GroupID)
 	}
+}
+
+func isUnknownTopicError(err error) bool {
+	return strings.Contains(err.Error(), "Unknown Topic Or Partition")
 }

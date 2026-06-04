@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,10 @@ func (h *StudentHandler) Register(c *gin.Context) {
 		Email: body.Email,
 	})
 	if err != nil {
+		if errors.Is(err, domain.ErrEmailAlreadyTaken) {
+			c.JSON(http.StatusConflict, errorResponse{Error: domain.ErrEmailAlreadyTaken.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}

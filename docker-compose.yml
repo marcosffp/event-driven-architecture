@@ -76,6 +76,7 @@ services:
       PROCESSOR: notification
       KAFKA_BROKER: kafka:9092
       DATABASE_URL: ${DATABASE_URL}
+      FAIL_RATE: ${FAIL_RATE:-}
     depends_on:
       kafka:
         condition: service_healthy
@@ -92,6 +93,7 @@ services:
       PROCESSOR: audit
       KAFKA_BROKER: kafka:9092
       DATABASE_URL: ${DATABASE_URL}
+      FAIL_RATE: ${FAIL_RATE:-}
     depends_on:
       kafka:
         condition: service_healthy
@@ -108,6 +110,7 @@ services:
       PROCESSOR: report
       KAFKA_BROKER: kafka:9092
       DATABASE_URL: ${DATABASE_URL}
+      FAIL_RATE: ${FAIL_RATE:-}
     depends_on:
       kafka:
         condition: service_healthy
@@ -124,6 +127,7 @@ services:
       PROCESSOR: dlq
       KAFKA_BROKER: kafka:9092
       DATABASE_URL: ${DATABASE_URL}
+      FAIL_RATE: ${FAIL_RATE:-}
     depends_on:
       kafka:
         condition: service_healthy

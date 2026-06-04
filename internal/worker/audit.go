@@ -17,6 +17,10 @@ func NewAuditProcessor() *AuditProcessor {
 }
 
 func (p *AuditProcessor) Process(ctx context.Context, payload []byte) error {
+	if err := simulatedFailure("AuditProcessor"); err != nil {
+		return err
+	}
+
 	var studentEvent events.StudentRegisteredEvent
 	if err := json.Unmarshal(payload, &studentEvent); err == nil && studentEvent.Email != "" {
 		log.Printf("[audit] student.registered | id: %s | latência: %s",

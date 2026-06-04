@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
+	"github.com/lib/pq"
 	"github.com/marcosffp/event-driven-architecture/internal/domain"
 )
 
@@ -27,6 +29,10 @@ func (r *StudentRepository) Save(ctx context.Context, student domain.Student, ev
 		"INSERT INTO students (id, name, email, created_at) VALUES ($1, $2, $3, $4)",
 		string(student.ID), student.Name, student.Email, student.CreatedAt,
 	); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return fmt.Errorf("Save: %w", domain.ErrEmailAlreadyTaken)
+		}
 		return fmt.Errorf("Save: insertStudent: %w", err)
 	}
 

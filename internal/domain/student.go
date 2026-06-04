@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrEmailAlreadyTaken = errors.New("email already registered")
 
 type StudentID string
 
