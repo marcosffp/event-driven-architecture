@@ -1,3 +1,9 @@
+<!--
+<div align="center" style="background:#1a1a2e;padding:32px 0;border-radius:12px">
+<div align="center" style="background:#3fc3a7;padding:32px 80px;border-radius:12px;width:85%">
+-->
+<img width="1600" style="height:auto; border-radius: 12px;" alt="banner" src="docs/images/banner.png" />
+
 # Academic — Plataforma Acadêmica Orientada a Eventos
 
 > Trabalho Prático — Arquitetura de Software (5º período) · PUC Minas  
