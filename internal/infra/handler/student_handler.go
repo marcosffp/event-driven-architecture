@@ -27,6 +27,17 @@ type registerStudentRequest struct {
 	Email string `json:"email" binding:"required"`
 }
 
+// Register godoc
+// @Summary      Cadastrar aluno
+// @Tags         students
+// @Accept       json
+// @Produce      json
+// @Param        body body registerStudentRequest true "Dados do aluno"
+// @Success      201 {object} domain.Student
+// @Failure      400 {object} errorResponse
+// @Failure      409 {object} errorResponse
+// @Failure      500 {object} errorResponse
+// @Router       /students [post]
 func (h *StudentHandler) Register(c *gin.Context) {
 	var body registerStudentRequest
 	if err := c.ShouldBindJSON(&body); err != nil {

@@ -26,6 +26,16 @@ type createEnrollmentRequest struct {
 	CourseID  string `json:"course_id"  binding:"required"`
 }
 
+// Create godoc
+// @Summary      Criar matrícula
+// @Tags         enrollments
+// @Accept       json
+// @Produce      json
+// @Param        body body createEnrollmentRequest true "Dados da matrícula"
+// @Success      201 {object} domain.Enrollment
+// @Failure      400 {object} errorResponse
+// @Failure      500 {object} errorResponse
+// @Router       /enrollments [post]
 func (h *EnrollmentHandler) Create(c *gin.Context) {
 	var body createEnrollmentRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
