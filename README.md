@@ -61,37 +61,7 @@ O objetivo central não é apenas enviar mensagens, mas evidenciar como a **troc
 
 A aplicação segue **Clean Architecture** com separação estrita em camadas. A regra fundamental: a dependência sempre aponta para dentro — infra depende de usecase, usecase depende de domain, domain não depende de ninguém.
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                          HTTP Client                               │
-└────────────────────────────────┬───────────────────────────────────┘
-                                 │ POST /students · POST /enrollments
-┌────────────────────────────────▼───────────────────────────────────┐
-│                    API  (cmd/api)  —  Gin HTTP                     │
-│                                                                    │
-│  infra/handler → usecase → infra/postgres                          │
-│                              ├─ INSERT INTO students/enrollments   │
-│                              └─ INSERT INTO outbox_events          │
-│                                        ↓ (mesma transação)         │
-│                            OutboxRelay goroutine (200ms)           │
-│                              └─ infra/kafka/publisher → Kafka      │
-└────────────────────────────────┬───────────────────────────────────┘
-                                 │ tópicos Kafka (3 partições cada)
-             ┌───────────────────┼──────────────────────┐
-             ▼                   ▼                      ▼
-   ┌──────────────────┐ ┌───────────────┐   ┌───────────────────┐
-   │ worker-          │ │ worker-audit  │   │ worker-report     │
-   │ notification     │ │               │   │ (só enrollments)  │
-   └────────┬─────────┘ └───────┬───────┘   └────────┬──────────┘
-            │                   │                    │
-            └───────────────────┴────────────────────┘
-                                │ falha após 3 retries → DLQ
-                       ┌────────▼────────┐
-                       │   worker-dlq    │  ← auto-republica até 3 ciclos
-                       └─────────────────┘
-
-  Todos os workers → infra/postgres (TryClaim atômico por event_id + consumer_group)
-```
+<img alt="Diagrama Arquitetural" src="docs/images/Arquitetura.jpeg">
 
 **Regras de dependência por camada:**
 
